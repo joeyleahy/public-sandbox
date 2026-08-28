@@ -766,17 +766,48 @@
     recent.hidden = list.length === 0;
   }
 
+  var busy = false;
+
+  function say(text, state) {
+    hint.textContent = text;
+    if (state) { hint.dataset.state = state; } else { delete hint.dataset.state; }
+  }
+
+  function open_(name, remember) {
+    if (remember) {
+      save([name].concat(read().filter(function (n) { return n !== name; })));
+    }
+    window.location.href = '/' + name + '/';
+  }
+
   function go() {
+    if (busy) { return; }
+
     var name = clean(input.value);
 
     if (!name) {
-      hint.textContent = 'Enter a project name.';
-      hint.dataset.state = 'warn';
+      say('Enter a project name.', 'warn');
       return;
     }
 
-    save([name].concat(read().filter(function (n) { return n !== name; })));
-    window.location.href = '/' + name + '/';
+    busy = true;
+    say('Checking\u2026');
+
+    fetch('/' + name + '/', { method: 'HEAD' })
+      .then(function (res) {
+        if (res.ok) {
+          open_(name, true);
+        } else if (res.status === 404 || res.status === 410) {
+          busy = false;
+          say('Nothing at /' + name + '/', 'warn');
+          input.select();
+        } else {
+          open_(name, false);
+        }
+      })
+      .catch(function () {
+        open_(name, false);
+      });
   }
 
   input.addEventListener('keydown', function (e) {
@@ -784,8 +815,8 @@
   });
 
   input.addEventListener('input', function () {
-    hint.textContent = 'Type a name and press Enter.';
-    delete hint.dataset.state;
+    busy = false;
+    say('Type a name and press Enter.');
   });
 
   var words = ['games', 'apps', 'systems', 'tools'];
