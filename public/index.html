@@ -1,14 +1,323 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>projects</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>projects</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400;12..96,75..100,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground:  #0E1B21;
+    --plate:   #14252D;
+    --rule:    #26404A;
+    --bone:    #E9E3D5;
+    --dim:     #708791;
+    --brass:   #D9A441;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--bone);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- plate header ---- */
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 1.6rem clamp(1.2rem, 5vw, 3.5rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .mark {
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--bone);
+  }
+
+  .meta {
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  /* ---- centre stage ---- */
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem clamp(1.2rem, 5vw, 3.5rem) 4rem;
+    max-width: 60rem;
+    width: 100%;
+  }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 1.1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.25em;
+    transition: border-color 160ms ease;
+  }
+
+  .field:focus-within { border-color: var(--brass); }
+
+  .slash {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: clamp(2rem, 7.5vw, 4rem);
+    font-weight: 400;
+    color: var(--dim);
+    line-height: 1;
+    user-select: none;
+  }
+
+  #slug {
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--bone);
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: clamp(2rem, 7.5vw, 4rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    caret-color: var(--brass);
+  }
+
+  #slug:focus { outline: none; }
+  #slug::placeholder { color: var(--rule); font-weight: 400; }
+
+  .hint {
+    margin-top: 0.9rem;
+    font-size: 0.75rem;
+    color: var(--dim);
+    min-height: 1.2em;
+    transition: color 160ms ease;
+  }
+
+  .hint[data-state="warn"] { color: var(--brass); }
+
+  /* ---- recent ---- */
+
+  .recent {
+    margin-top: 3.5rem;
+  }
+
+  .recent[hidden] { display: none; }
+
+  .recent-label {
+    font-size: 0.66rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 0.9rem;
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55em;
+    background: var(--plate);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.45em 0.7em;
+  }
+
+  .chip a {
+    color: var(--bone);
+    text-decoration: none;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+  }
+
+  .chip a:hover, .chip a:focus-visible { color: var(--brass); }
+
+  .chip button {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0 0 0 0.1em;
+    cursor: pointer;
+    color: var(--rule);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  .chip button:hover, .chip button:focus-visible { color: var(--brass); }
+
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+  footer {
+    padding: 1.3rem clamp(1.2rem, 5vw, 3.5rem);
+    border-top: 1px solid var(--rule);
+    font-size: 0.66rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  /* ---- load-in ---- */
+
+  @media (prefers-reduced-motion: no-preference) {
+    .field, .eyebrow, .hint, .recent { animation: rise 520ms cubic-bezier(.2,.7,.3,1) both; }
+    .eyebrow { animation-delay: 40ms; }
+    .field   { animation-delay: 90ms; }
+    .hint    { animation-delay: 160ms; }
+    .recent  { animation-delay: 220ms; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: none; }
+    }
+  }
+</style>
 </head>
 <body>
-  <h1>projects</h1>
-  <ul>
-    <li><a href="/mario/">Mario</a> — canvas platformer</li>
-  </ul>
+
+<header>
+  <div class="mark">Projects</div>
+  <div class="meta" id="stamp"></div>
+</header>
+
+<main>
+  <p class="eyebrow">Open a project</p>
+
+  <div class="field">
+    <span class="slash" aria-hidden="true">/</span>
+    <input id="slug"
+           type="text"
+           placeholder="name"
+           autocomplete="off"
+           autocapitalize="off"
+           autocorrect="off"
+           spellcheck="false"
+           aria-label="Project name">
+  </div>
+
+  <p class="hint" id="hint">Type a name and press Enter.</p>
+
+  <section class="recent" id="recent" hidden>
+    <p class="recent-label">Opened from this browser</p>
+    <div class="chips" id="chips"></div>
+  </section>
+</main>
+
+<footer>Private index — nothing here is listed publicly</footer>
+
+<script>
+(function () {
+  var KEY   = 'projects.recent';
+  var LIMIT = 10;
+
+  var input  = document.getElementById('slug');
+  var hint   = document.getElementById('hint');
+  var recent = document.getElementById('recent');
+  var chips  = document.getElementById('chips');
+
+  document.getElementById('stamp').textContent = String(new Date().getFullYear());
+
+  function read() {
+    try {
+      var v = JSON.parse(localStorage.getItem(KEY) || '[]');
+      return Array.isArray(v) ? v.filter(function (s) { return typeof s === 'string'; }) : [];
+    } catch (e) { return []; }
+  }
+
+  function save(list) {
+    try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, LIMIT))); } catch (e) {}
+  }
+
+  function clean(raw) {
+    return raw.toLowerCase().trim()
+      .replace(/^\/+|\/+$/g, '')
+      .replace(/[^a-z0-9\-_]/g, '');
+  }
+
+  function render() {
+    var list = read();
+    chips.textContent = '';
+
+    list.forEach(function (name) {
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+
+      var link = document.createElement('a');
+      link.href = '/' + name + '/';
+      link.textContent = name;
+
+      var drop = document.createElement('button');
+      drop.type = 'button';
+      drop.textContent = '\u00d7';
+      drop.setAttribute('aria-label', 'Forget ' + name);
+      drop.addEventListener('click', function () {
+        save(read().filter(function (n) { return n !== name; }));
+        render();
+      });
+
+      chip.appendChild(link);
+      chip.appendChild(drop);
+      chips.appendChild(chip);
+    });
+
+    recent.hidden = list.length === 0;
+  }
+
+  function go() {
+    var name = clean(input.value);
+
+    if (!name) {
+      hint.textContent = 'Enter a project name.';
+      hint.dataset.state = 'warn';
+      return;
+    }
+
+    save([name].concat(read().filter(function (n) { return n !== name; })));
+    window.location.href = '/' + name + '/';
+  }
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); go(); }
+  });
+
+  input.addEventListener('input', function () {
+    hint.textContent = 'Type a name and press Enter.';
+    delete hint.dataset.state;
+  });
+
+  render();
+  input.focus();
+})();
+</script>
+
 </body>
 </html>
