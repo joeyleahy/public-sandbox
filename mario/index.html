@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>One Level</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #1b1f2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, sans-serif;
+  }
+  #game {
+    background: #7ec8f2;
+    display: block;
+    box-shadow: 0 0 0 4px #0d0f14;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="450"></canvas>
+<script>
+// ==================== Constants ====================
+const CANVAS_W = 800, CANVAS_H = 450;
+const MOVE_ACCEL = 1400;
+const MAX_SPEED = 220;
+const FRICTION = 1600;
+const GRAVITY = 2000;
+const JUMP_VELOCITY = -620;
+const STOMP_BOUNCE = -320;
+const MAX_FALL_SPEED = 900;
+const GROUND_Y = 380;
+const LEVEL_WIDTH = 3200;
+const START_X = 50, START_Y = 300;
+
+// ==================== Input ====================
+const input = { left: false, right: false, jumpPressed: false, jumpHeld: false };
+
+const KEY_MAP = {
+  ArrowLeft: 'left', KeyA: 'left',
+  ArrowRight: 'right', KeyD: 'right',
+  ArrowUp: 'jump', Space: 'jump', KeyW: 'jump',
+};
+
+window.addEventListener('keydown', (e) => {
+  const action = KEY_MAP[e.code];
+  if (action) e.preventDefault();
+  if (e.code === 'KeyR') resetGame();
+  if (!action) return;
+  if (action === 'left') input.left = true;
+  if (action === 'right') input.right = true;
+  if (action === 'jump' && !input.jumpHeld) input.jumpPressed = true;
+  if (action === 'jump') input.jumpHeld = true;
+});
+
+window.addEventListener('keyup', (e) => {
+  const action = KEY_MAP[e.code];
+  if (!action) return;
+  if (action === 'left') input.left = false;
+  if (action === 'right') input.right = false;
+  if (action === 'jump') input.jumpHeld = false;
+});
+
+// ==================== Level data ====================
+function buildLevel() {
+  return {
+    width: LEVEL_WIDTH,
+    solids: [
+      { x: 0,    y: GROUND_Y, w: 500,  h: 70 },
+      // gap 500-620
+      { x: 620,  y: GROUND_Y, w: 380,  h: 70 },
+      { x: 1080, y: 300,      w: 120,  h: 20 },
+      { x: 1300, y: GROUND_Y, w: 300,  h: 70 },
+      // gap 1600-1700
+      { x: 1700, y: GROUND_Y, w: 200,  h: 70 },
+      { x: 2000, y: 260,      w: 100,  h: 20 },
+      { x: 2200, y: GROUND_Y, w: 1000, h: 70 },
+    ],
+    coinsInit: [
+      { x: 700,  y: 320, r: 8 },
+      { x: 1120, y: 260, r: 8 },
+      { x: 2050, y: 220, r: 8 },
+      { x: 2600, y: 330, r: 8 },
+    ],
+    enemiesInit: [
+      { x: 700,  y: GROUND_Y - 28, w: 26, h: 28, speed: 60, patrolMin: 620,  patrolMax: 950 },
+      { x: 1350, y: GROUND_Y - 28, w: 26, h: 28, speed: 60, patrolMin: 1300, patrolMax: 1580 },
+      { x: 2300, y: GROUND_Y - 28, w: 26, h: 28, speed: 70, patrolMin: 2200, patrolMax: 2600 },
+    ],
+    goal: { x: 3100, y: GROUND_Y - 120, w: 12, h: 120 },
+  };
+}
+
+let level = buildLevel();
+let coins, enemies;
+
+// ==================== Player ====================
+function makePlayer() {
+  return {
+    x: START_X, y: START_Y, w: 28, h: 36,
+    vx: 0, vy: 0,
+    onGround: false,
+    facing: 1,
+    lives: 3,
+    invulnerableTimer: 0,
+  };
+}
+let player = makePlayer();
+
+let score = { coins: 0 };
+let gameState = 'playing'; // 'playing' | 'won' | 'lost'
+
+// ==================== Camera ====================
+const camera = { x: 0 };
+
+function updateCamera() {
+  const targetX = player.x + player.w / 2 - CANVAS_W / 2;
+  camera.x = Math.max(0, Math.min(targetX, level.width - CANVAS_W));
+}
+
+// ==================== Physics / collision helpers ====================
+function aabbOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function moveAndCollide(entity, dt, solids) {
+  entity.x += entity.vx * dt;
+  for (const rect of solids) {
+    if (aabbOverlap(entity, rect)) {
+      if (entity.vx > 0) entity.x = rect.x - entity.w;
+      else if (entity.vx < 0) entity.x = rect.x + rect.w;
+      entity.vx = 0;
+    }
+  }
+
+  entity.y += entity.vy * dt;
+  entity.onGround = false;
+  for (const rect of solids) {
+    if (aabbOverlap(entity, rect)) {
+      if (entity.vy > 0) {
+        entity.y = rect.y - entity.h;
+        entity.vy = 0;
+        entity.onGround = true;
+      } else if (entity.vy < 0) {
+        entity.y = rect.y + rect.h;
+        entity.vy = 0;
+      }
+    }
+  }
+}
+
+// ==================== Update ====================
+function updatePlayerHorizontal(dt) {
+  if (input.left && !input.right) {
+    player.vx -= MOVE_ACCEL * dt;
+    player.facing = -1;
+  } else if (input.right && !input.left) {
+    player.vx += MOVE_ACCEL * dt;
+    player.facing = 1;
+  } else {
+    const drop = FRICTION * dt;
+    if (player.vx > 0) player.vx = Math.max(0, player.vx - drop);
+    else if (player.vx < 0) player.vx = Math.min(0, player.vx + drop);
+  }
+  player.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, player.vx));
+}
+
+function updatePlayerVertical(dt) {
+  if (input.jumpPressed && player.onGround) {
+    player.vy = JUMP_VELOCITY;
+    player.onGround = false;
+  }
+  input.jumpPressed = false;
+  player.vy += GRAVITY * dt;
+  player.vy = Math.min(player.vy, MAX_FALL_SPEED);
+}
+
+function damagePlayer() {
+  player.lives -= 1;
+  player.invulnerableTimer = 1.2;
+  if (player.lives <= 0) {
+    gameState = 'lost';
+  } else {
+    respawnPlayer();
+  }
+}
+
+function respawnPlayer() {
+  player.x = START_X;
+  player.y = START_Y;
+  player.vx = 0;
+  player.vy = 0;
+  player.invulnerableTimer = 1.5;
+}
+
+function updateEnemies(dt) {
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    e.x += e.vx * dt;
+    if (e.x <= e.patrolMin) { e.x = e.patrolMin; e.vx = Math.abs(e.speed); }
+    if (e.x + e.w >= e.patrolMax) { e.x = e.patrolMax - e.w; e.vx = -Math.abs(e.speed); }
+
+    if (aabbOverlap(player, e) && player.invulnerableTimer <= 0) {
+      const playerBottom = player.y + player.h;
+      const fallingOntoTop = player.vy > 0 && (playerBottom - e.y) < 14;
+      if (fallingOntoTop) {
+        e.alive = false;
+        player.vy = STOMP_BOUNCE;
+      } else {
+        damagePlayer();
+      }
+    }
+  }
+}
+
+function updateCoins() {
+  for (const c of coins) {
+    if (c.collected) continue;
+    const dx = (player.x + player.w / 2) - c.x;
+    const dy = (player.y + player.h / 2) - c.y;
+    if (Math.sqrt(dx * dx + dy * dy) < c.r + 16) {
+      c.collected = true;
+      score.coins += 1;
+    }
+  }
+}
+
+function checkWinLose() {
+  if (gameState !== 'playing') return;
+  if (aabbOverlap(player, level.goal)) {
+    gameState = 'won';
+    return;
+  }
+  if (player.y > CANVAS_H + 100) {
+    player.lives -= 1;
+    if (player.lives <= 0) gameState = 'lost';
+    else respawnPlayer();
+  }
+}
+
+function update(dt) {
+  if (player.invulnerableTimer > 0) player.invulnerableTimer -= dt;
+
+  updatePlayerHorizontal(dt);
+  updatePlayerVertical(dt);
+  moveAndCollide(player, dt, level.solids);
+
+  updateEnemies(dt);
+  updateCoins();
+  updateCamera();
+  checkWinLose();
+}
+
+// ==================== Render ====================
+const ctx = document.getElementById('game').getContext('2d');
+
+function drawBackground() {
+  ctx.fillStyle = '#7ec8f2';
+  ctx.fillRect(camera.x, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  for (let i = 0; i < 8; i++) {
+    const hx = (i * 420) % level.width;
+    ctx.beginPath();
+    ctx.ellipse(hx, 90, 45, 22, 0, 0, Math.PI * 2);
+    ctx.ellipse(hx + 35, 100, 35, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawSolids() {
+  for (const r of level.solids) {
+    ctx.fillStyle = r.y <= GROUND_Y - 40 ? '#a9662d' : '#4c9a2a';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(r.x, r.y, r.w, 6);
+  }
+}
+
+function drawCoins() {
+  ctx.fillStyle = '#ffd23f';
+  for (const c of coins) {
+    if (c.collected) continue;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    ctx.fillStyle = '#c1272d';
+    ctx.fillRect(e.x, e.y, e.w, e.h);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(e.x + 4, e.y + 6, 5, 5);
+    ctx.fillRect(e.x + e.w - 9, e.y + 6, 5, 5);
+  }
+}
+
+function drawGoal() {
+  const g = level.goal;
+  ctx.fillStyle = '#888';
+  ctx.fillRect(g.x, g.y, g.w, g.h);
+  ctx.fillStyle = gameState === 'won' ? '#4c9a2a' : '#e0392b';
+  ctx.beginPath();
+  ctx.moveTo(g.x + g.w, g.y);
+  ctx.lineTo(g.x + g.w + 34, g.y + 12);
+  ctx.lineTo(g.x + g.w, g.y + 24);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPlayer() {
+  const flicker = player.invulnerableTimer > 0 && Math.floor(player.invulnerableTimer * 12) % 2 === 0;
+  if (flicker) return;
+  ctx.fillStyle = '#2255dd';
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.fillStyle = '#ffe0bd';
+  ctx.fillRect(player.x + (player.facing > 0 ? player.w - 10 : 2), player.y + 4, 8, 8);
+}
+
+function drawHUD() {
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Coins: ' + score.coins + ' / ' + level.coinsInit.length, 14, 26);
+  ctx.fillText('Lives: ' + player.lives, 14, 50);
+}
+
+function drawOverlayIfGameOver() {
+  if (gameState === 'playing') return;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.fillText(gameState === 'won' ? 'You reached the flag!' : 'Game Over', CANVAS_W / 2, CANVAS_H / 2 - 10);
+  ctx.font = '18px system-ui, sans-serif';
+  ctx.fillText('Press R to restart', CANVAS_W / 2, CANVAS_H / 2 + 24);
+}
+
+function render() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.save();
+  ctx.translate(-camera.x, 0);
+  drawBackground();
+  drawSolids();
+  drawCoins();
+  drawEnemies();
+  drawGoal();
+  drawPlayer();
+  ctx.restore();
+  drawHUD();
+  drawOverlayIfGameOver();
+}
+
+// ==================== Game loop / reset ====================
+function resetGame() {
+  level = buildLevel();
+  coins = level.coinsInit.map(c => ({ ...c, collected: false }));
+  enemies = level.enemiesInit.map(e => ({ ...e, vx: e.speed, alive: true }));
+  player = makePlayer();
+  score = { coins: 0 };
+  gameState = 'playing';
+}
+resetGame();
+
+let lastTime = 0;
+function frame(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 1 / 30);
+  lastTime = timestamp;
+
+  if (gameState === 'playing') update(dt);
+  render();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
